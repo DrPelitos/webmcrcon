@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCRCON Web Console</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        body.dark-mode {
+            background-color: #121212;
+            color: #fff;
+        }
+
+        body.light-mode {
+            background-color: #f4f4f4;
+            color: #000;
+        }
+
+        h1 {
+            text-align: center;
+            padding: 10px;
+            background-color: #1e1e1e;
+            color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        body.light-mode h1 {
+            background-color: #ddd;
+            color: black;
+        }
+
+        #theme-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        #output {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 2px solid #333;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+
+        .collapsible {
+            background-color: #222;
+            color: white;
+            cursor: pointer;
+            padding: 10px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            font-size: 16px;
+        }
+
+        .collapsible:hover {
+            background-color: #333;
+        }
+
+        .content {
+            display: none;
+            padding: 10px;
+            background-color: #1e1e1e;
+            border-bottom: 2px solid #333;
+        }
+
+        .input-container {
+            display: flex;
+            background-color: #1e1e1e;
+            padding: 10px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        input {
+            flex: 1;
+            padding: 10px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        body.light-mode .collapsible,
+        body.light-mode .content,
+        body.light-mode .input-container {
+            background-color: #ddd;
+            color: black;
+        }
+
+        body.light-mode #output {
+            border-bottom: 2px solid #bbb;
+        }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <h1>MCRCON Web Console</h1>
+    <span id="theme-toggle">🌙</span>
+
+    <button class="collapsible">Server Settings ▼</button>
+    <div class="content">
+        <input type="text" id="server-ip" placeholder="Enter Server IP (default: 127.0.0.1)">
+        <input type="password" id="password" placeholder="Enter RCON Password">
+    </div>
+
+    <pre id="output">Waiting for command...</pre>
+
+    <div class="input-container">
+        <input type="text" id="command" placeholder="Enter command">
+        <button onclick="sendCommand()">Send</button>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const collapsible = document.querySelector(".collapsible");
+            const content = document.querySelector(".content");
+            const themeToggle = document.getElementById("theme-toggle");
+            const body = document.body;
+
+            collapsible.addEventListener("click", function () {
+                if (content.style.display === "block") {
+                    content.style.display = "none";
+                    collapsible.textContent = "Server Settings ▼";
+                } else {
+                    content.style.display = "block";
+                    collapsible.textContent = "Server Settings ▲";
+                }
+            });
+
+            // Load settings
+            const savedIp = localStorage.getItem("serverIp");
+            const savedPassword = localStorage.getItem("password");
+            const savedTheme = localStorage.getItem("theme");
+
+            if (savedIp) document.getElementById("server-ip").value = savedIp;
+            if (savedPassword) document.getElementById("password").value = atob(savedPassword);
+            if (savedTheme) {
+                body.className = savedTheme;
+                themeToggle.textContent = savedTheme === "dark-mode" ? "🌙" : "☀️";
+            }
+
+            document.getElementById("server-ip").addEventListener("input", saveSettings);
+            document.getElementById("password").addEventListener("input", saveSettings);
+
+            document.getElementById("command").addEventListener("keypress", function (event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    sendCommand();
+                }
+            });
+
+            themeToggle.addEventListener("click", function () {
+                if (body.classList.contains("dark-mode")) {
+                    body.classList.replace("dark-mode", "light-mode");
+                    themeToggle.textContent = "☀️";
+                    localStorage.setItem("theme", "light-mode");
+                } else {
+                    body.classList.replace("light-mode", "dark-mode");
+                    themeToggle.textContent = "🌙";
+                    localStorage.setItem("theme", "dark-mode");
+                }
+            });
+        });
+
+        function saveSettings() {
+            const ip = document.getElementById("server-ip").value;
+            const password = document.getElementById("password").value;
+            localStorage.setItem("serverIp", ip);
+            localStorage.setItem("password", btoa(password));
+        }
+
+        async function sendCommand() {
+            const serverIp = document.getElementById("server-ip").value || "127.0.0.1";
+            const password = document.getElementById("password").value;
+            const command = document.getElementById("command").value;
+            const output = document.getElementById("output");
+
+            if (!password || !command) {
+                output.textContent += "\n⚠️ Please enter both password and command!";
+                return;
+            }
+
+            const encryptedPassword = CryptoJS.AES.encrypt(password, "your_super_secret_key").toString();
+
+            try {
+                const response = await fetch(`http://${serverIp}:3000/send-command`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ command, encryptedPassword }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+
+                const data = await response.json();
+                output.textContent += `\n> ${command}\n${data.response || "✅ Command sent successfully!"}`;
+            } catch (error) {
+                output.textContent += `\n❌ Error: ${error.message || "Failed to connect to server."}`;
+            }
+
+            document.getElementById("command").value = "";
+        }
+    </script>
+
+</body>
+</html>
